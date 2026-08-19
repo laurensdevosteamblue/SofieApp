@@ -1,0 +1,17 @@
+{
+  "name": "sofiesite",
+  "version": "1.0.0",
+  "description": "Sound board: a grid of tiles with text/image and recorded/uploaded audio, managed via an admin login",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "express-session": "^1.19.0",
+    "multer": "^2.2.0"
+  }
+}

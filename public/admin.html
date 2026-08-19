@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin · Sofie Sound Board</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="admin-shell">
+    <!-- Login view -->
+    <section id="login-view">
+      <div class="login-card">
+        <h2>Admin Login</h2>
+        <p>Enter the admin password to manage the sound board.</p>
+        <form id="login-form">
+          <input type="password" id="password" placeholder="Password" autocomplete="current-password" required>
+          <div class="error-msg" id="login-error"></div>
+          <button class="btn full" type="submit" style="margin-top:16px">Log in</button>
+        </form>
+        <p style="margin-top:20px"><a class="admin-link" href="index.html">← Back to board</a></p>
+      </div>
+    </section>
+
+    <!-- Editor view -->
+    <section id="editor-view" style="display:none">
+      <div class="admin-toolbar">
+        <h1>Manage Sound Board</h1>
+        <div class="toolbar-actions">
+          <button class="btn small" id="add-tile-btn">+ Add tile</button>
+          <a class="btn ghost small" href="index.html">View board</a>
+          <button class="btn ghost small" id="logout-btn">Log out</button>
+        </div>
+      </div>
+      <p class="tile-count" id="tile-count"></p>
+      <div class="admin-grid" id="admin-grid"></div>
+      <div class="empty-admin" id="empty-admin" style="display:none">
+        No tiles yet. Click <strong>+ Add tile</strong> to create your first one.
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast"></div>
+  <script src="admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Runtime data (persisted on the server's disk, not in git)
+data/
+public/uploads/
+
+# Environment / secrets
+.env
+.env.local
+
+# Logs & OS files
+*.log
+npm-debug.log*
+.DS_Store
