@@ -212,17 +212,26 @@ function buildEditor(cell, index) {
       mediaRecorder = new MediaRecorder(stream);
       chunks = [];
       mediaRecorder.ondataavailable = (e) => { if (e.data.size) chunks.push(e.data); };
-      mediaRecorder.onstop = () => {
+      mediaRecorder.onstop = async () => {
         stream.getTracks().forEach((t) => t.stop());
-        recordedBlob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        const rawBlob = new Blob(chunks, { type: mediaRecorder.mimeType || 'audio/webm' });
+        recBtn.disabled = true;
+        recStatus.textContent = 'Processing…';
+        recStatus.classList.remove('recording');
+        // Convert to WAV so it plays on all devices (iPhone/Safari can't play WebM).
+        try {
+          recordedBlob = await toWav(rawBlob);
+        } catch (err) {
+          recordedBlob = rawBlob; // fall back to the raw recording
+        }
         audioFileInput.value = '';
         clearAudio = false;
         audioPreview.src = URL.createObjectURL(recordedBlob);
         audioPreview.style.display = '';
         recBtn.textContent = '● Record';
         recBtn.classList.remove('danger');
+        recBtn.disabled = false;
         recStatus.textContent = 'Recorded ✓';
-        recStatus.classList.remove('recording');
       };
       mediaRecorder.start();
       recBtn.textContent = '■ Stop';
@@ -256,8 +265,7 @@ function buildEditor(cell, index) {
         fd.append('image', imageFileInput.files[0]);
       }
       if (recordedBlob) {
-        const ext = (recordedBlob.type.includes('ogg')) ? 'ogg' : 'webm';
-        fd.append('audio', recordedBlob, `recording.${ext}`);
+        fd.append('audio', recordedBlob, `recording.${extFromMime(recordedBlob.type)}`);
       } else if (audioFileInput.files && audioFileInput.files[0]) {
         fd.append('audio', audioFileInput.files[0]);
       }
@@ -289,6 +297,73 @@ function escapeHtml(str) {
 }
 function escapeAttr(str) {
   return escapeHtml(str);
+}
+
+function extFromMime(mime) {
+  if (!mime) return 'webm';
+  if (mime.includes('wav')) return 'wav';
+  if (mime.includes('ogg')) return 'ogg';
+  if (mime.includes('mp4') || mime.includes('aac') || mime.includes('m4a')) return 'm4a';
+  if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3';
+  return 'webm';
+}
+
+// Decode a recorded blob and re-encode it as a WAV file for maximum
+// cross-device compatibility (iPhone/Safari cannot play WebM/Opus).
+async function toWav(blob) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error('No AudioContext');
+  const arrayBuffer = await blob.arrayBuffer();
+  const ctx = new AudioCtx();
+  try {
+    const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+    return encodeWav(audioBuffer);
+  } finally {
+    ctx.close();
+  }
+}
+
+function encodeWav(audioBuffer) {
+  const numCh = audioBuffer.numberOfChannels;
+  const sampleRate = audioBuffer.sampleRate;
+  const numFrames = audioBuffer.length;
+  const bytesPerSample = 2;
+  const blockAlign = numCh * bytesPerSample;
+  const dataSize = numFrames * blockAlign;
+  const buffer = new ArrayBuffer(44 + dataSize);
+  const view = new DataView(buffer);
+
+  const writeStr = (off, s) => {
+    for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+  };
+
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataSize, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numCh, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * blockAlign, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, 16, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataSize, true);
+
+  const channels = [];
+  for (let c = 0; c < numCh; c++) channels.push(audioBuffer.getChannelData(c));
+
+  let offset = 44;
+  for (let i = 0; i < numFrames; i++) {
+    for (let c = 0; c < numCh; c++) {
+      let sample = Math.max(-1, Math.min(1, channels[c][i]));
+      sample = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+      view.setInt16(offset, sample, true);
+      offset += 2;
+    }
+  }
+  return new Blob([view], { type: 'audio/wav' });
 }
 
 checkSession();
