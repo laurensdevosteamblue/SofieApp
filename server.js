@@ -16,9 +16,31 @@ const MAX_CELLS = 500;
 const DATA_DIR = path.join(__dirname, 'data');
 const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
 const DATA_FILE = path.join(DATA_DIR, 'cells.json');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 
 for (const dir of [DATA_DIR, UPLOAD_DIR]) {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+}
+
+const DEFAULT_SETTINGS = {
+  title: 'Sofie · Sound Board',
+  subtitle: 'Tap a tile to hear its message.',
+};
+
+function loadSettings() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
+    return {
+      title: typeof raw.title === 'string' ? raw.title : DEFAULT_SETTINGS.title,
+      subtitle: typeof raw.subtitle === 'string' ? raw.subtitle : DEFAULT_SETTINGS.subtitle,
+    };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(s) {
+  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2));
 }
 
 function newId() {
@@ -52,6 +74,7 @@ function saveCells(cells) {
 }
 
 let cells = loadCells();
+let settings = loadSettings();
 
 // --- Middleware ---
 app.use(express.json());
@@ -122,6 +145,19 @@ app.get('/api/session', (req, res) => {
 
 app.get('/api/cells', (req, res) => {
   res.json(cells);
+});
+
+// Site settings (title + subtitle shown on the public page).
+app.get('/api/settings', (req, res) => {
+  res.json(settings);
+});
+
+app.post('/api/settings', requireAdmin, (req, res) => {
+  const body = req.body || {};
+  if (typeof body.title === 'string') settings.title = body.title;
+  if (typeof body.subtitle === 'string') settings.subtitle = body.subtitle;
+  saveSettings(settings);
+  res.json(settings);
 });
 
 // Create a new empty tile (admin).

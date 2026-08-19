@@ -1,13 +1,14 @@
 :root {
-  --bg-1: #0f172a;
-  --bg-2: #1e293b;
-  --accent: #6366f1;
+  --bg-1: #e9ddfb;
+  --bg-2: #d7c6f5;
+  --accent: #8b5cf6;
   --accent-2: #ec4899;
-  --card: rgba(255, 255, 255, 0.06);
-  --card-border: rgba(255, 255, 255, 0.12);
-  --text: #f1f5f9;
-  --muted: #94a3b8;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --card: rgba(255, 255, 255, 0.75);
+  --card-border: rgba(139, 92, 246, 0.22);
+  --text: #3b2f5c;
+  --muted: #7c6f9a;
+  --input-bg: #ffffff;
+  --shadow: 0 10px 30px rgba(124, 92, 175, 0.20);
   --radius: 18px;
 }
 
@@ -22,8 +23,8 @@ body {
   font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   color: var(--text);
   background:
-    radial-gradient(1200px 600px at 10% -10%, rgba(99, 102, 241, 0.25), transparent 60%),
-    radial-gradient(1000px 500px at 110% 10%, rgba(236, 72, 153, 0.20), transparent 55%),
+    radial-gradient(1200px 600px at 10% -10%, rgba(167, 139, 250, 0.35), transparent 60%),
+    radial-gradient(1000px 500px at 110% 10%, rgba(244, 114, 182, 0.28), transparent 55%),
     linear-gradient(160deg, var(--bg-1), var(--bg-2));
   min-height: 100vh;
   padding: 48px 20px 80px;
@@ -44,7 +45,7 @@ body {
   font-size: clamp(1.8rem, 3vw, 2.6rem);
   font-weight: 800;
   letter-spacing: -0.02em;
-  background: linear-gradient(90deg, #fff, #c7d2fe 40%, #fbcfe8);
+  background: linear-gradient(90deg, #7c3aed, #a855f7 45%, #db2777);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -70,8 +71,8 @@ body {
 }
 .admin-link:hover {
   transform: translateY(-2px);
-  border-color: rgba(255, 255, 255, 0.3);
-  background: rgba(255, 255, 255, 0.12);
+  border-color: var(--accent);
+  background: #ffffff;
 }
 
 .raster {
@@ -218,7 +219,7 @@ textarea {
   padding: 12px 14px;
   border-radius: 12px;
   border: 1px solid var(--card-border);
-  background: rgba(15, 23, 42, 0.6);
+  background: var(--input-bg);
   color: var(--text);
   font-size: 0.95rem;
   font-family: inherit;
@@ -227,7 +228,7 @@ textarea {
 }
 input:focus, textarea:focus {
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.25);
 }
 textarea { resize: vertical; min-height: 64px; }
 
@@ -273,6 +274,18 @@ label.field-label {
 }
 .admin-toolbar h1 { margin: 0; font-size: 1.6rem; }
 .admin-toolbar .toolbar-actions { display: flex; gap: 10px; }
+
+.settings-card {
+  background: var(--card);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+  margin-bottom: 24px;
+  max-width: 640px;
+}
+.settings-card h2 { margin: 0 0 6px; font-size: 1.15rem; }
 
 .tile-count {
   color: var(--muted);
@@ -324,7 +337,7 @@ label.field-label {
   margin-top: 12px;
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(15, 23, 42, 0.5);
+  background: rgba(255, 255, 255, 0.6);
   border: 1px dashed var(--card-border);
   min-height: 90px;
   display: grid;
@@ -337,7 +350,7 @@ label.field-label {
 
 .record-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 8px; }
 .rec-status { font-size: 0.82rem; color: var(--muted); }
-.rec-status.recording { color: #f87171; font-weight: 600; }
+.rec-status.recording { color: #dc2626; font-weight: 600; }
 
 audio { width: 100%; margin-top: 10px; }
 
@@ -348,7 +361,7 @@ audio { width: 100%; margin-top: 10px; }
 .file-input::file-selector-button {
   margin-right: 10px;
   border: 1px solid var(--card-border);
-  background: rgba(255,255,255,0.06);
+  background: rgba(139, 92, 246, 0.12);
   color: var(--text);
   padding: 7px 12px;
   border-radius: 10px;
@@ -369,9 +382,9 @@ audio { width: 100%; margin-top: 10px; }
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%) translateY(120%);
-  background: rgba(15, 23, 42, 0.95);
-  border: 1px solid var(--card-border);
-  color: var(--text);
+  background: #3b2f5c;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #ffffff;
   padding: 12px 20px;
   border-radius: 12px;
   box-shadow: var(--shadow);
@@ -382,7 +395,7 @@ audio { width: 100%; margin-top: 10px; }
 .toast.show { transform: translateX(-50%) translateY(0); }
 .toast.error { border-color: #ef4444; }
 
-.error-msg { color: #f87171; font-size: 0.85rem; margin-top: 12px; min-height: 1em; }
+.error-msg { color: #dc2626; font-size: 0.85rem; margin-top: 12px; min-height: 1em; }
 
 /* Tablets & small laptops */
 @media (max-width: 720px) {

@@ -34,8 +34,44 @@ function showLogin() {
 async function showEditor() {
   loginView.style.display = 'none';
   editorView.style.display = '';
+  await loadSettings();
   await loadCells();
 }
+
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    const s = await res.json();
+    document.getElementById('set-title').value = s.title || '';
+    document.getElementById('set-subtitle').value = s.subtitle || '';
+  } catch { /* ignore */ }
+}
+
+document.getElementById('save-settings-btn').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  btn.disabled = true;
+  btn.textContent = 'Saving…';
+  try {
+    const res = await fetch('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title: document.getElementById('set-title').value,
+        subtitle: document.getElementById('set-subtitle').value,
+      }),
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || 'Save failed');
+    }
+    toast('Page settings saved');
+  } catch (err) {
+    toast(err.message, true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save settings';
+  }
+});
 
 loginForm.addEventListener('submit', async (e) => {
   e.preventDefault();

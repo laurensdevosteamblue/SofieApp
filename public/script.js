@@ -93,6 +93,18 @@ function renderCell(cell) {
   return tile;
 }
 
+async function loadSettings() {
+  try {
+    const res = await fetch('/api/settings');
+    const s = await res.json();
+    if (s.title) {
+      document.getElementById('site-title').textContent = s.title;
+      document.title = s.title;
+    }
+    document.getElementById('site-subtitle').textContent = s.subtitle || '';
+  } catch { /* keep defaults */ }
+}
+
 async function load() {
   try {
     const res = await fetch('/api/cells');
@@ -100,13 +112,14 @@ async function load() {
     raster.innerHTML = '';
     const visible = cells.filter((c) => c.imageUrl || c.title || c.text || c.audioUrl);
     if (!visible.length) {
-      raster.innerHTML = '<p style="color:#94a3b8;grid-column:1/-1;text-align:center">Nothing here yet. Add tiles from the Admin page.</p>';
+      raster.innerHTML = '<p style="color:var(--muted);grid-column:1/-1;text-align:center">Nothing here yet. Add tiles from the Admin page.</p>';
       return;
     }
     visible.forEach((cell) => raster.appendChild(renderCell(cell)));
   } catch (err) {
-    raster.innerHTML = '<p style="color:#f87171">Failed to load content.</p>';
+    raster.innerHTML = '<p style="color:#dc2626">Failed to load content.</p>';
   }
 }
 
+loadSettings();
 load();
