@@ -4,6 +4,7 @@
   "description": "Sound board: a grid of tiles with text/image and recorded/uploaded audio, managed via an admin login",
   "main": "server.js",
   "scripts": {
+    "build": "echo \"No build step required\"",
     "start": "node server.js"
   },
   "engines": {
