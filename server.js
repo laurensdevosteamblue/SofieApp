@@ -2,8 +2,8 @@ const express = require('express');
 const session = require('express-session');
 const multer = require('multer');
 const path = require('path');
-const fs = require('fs');
 const crypto = require('crypto');
+const { createStore } = require('./store');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,69 +12,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toSt
 
 const MAX_CELLS = 500;
 
-// --- Paths & storage setup ---
-const DATA_DIR = path.join(__dirname, 'data');
-const UPLOAD_DIR = path.join(__dirname, 'public', 'uploads');
-const DATA_FILE = path.join(DATA_DIR, 'cells.json');
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-
-for (const dir of [DATA_DIR, UPLOAD_DIR]) {
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-}
-
-const DEFAULT_SETTINGS = {
-  title: 'Sofie · Sound Board',
-  subtitle: 'Tap a tile to hear its message.',
-};
-
-function loadSettings() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8'));
-    return {
-      title: typeof raw.title === 'string' ? raw.title : DEFAULT_SETTINGS.title,
-      subtitle: typeof raw.subtitle === 'string' ? raw.subtitle : DEFAULT_SETTINGS.subtitle,
-    };
-  } catch {
-    return { ...DEFAULT_SETTINGS };
-  }
-}
-
-function saveSettings(s) {
-  fs.writeFileSync(SETTINGS_FILE, JSON.stringify(s, null, 2));
-}
-
-function newId() {
-  return Date.now().toString(36) + crypto.randomBytes(4).toString('hex');
-}
-
-function loadCells() {
-  try {
-    const raw = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-    if (!Array.isArray(raw)) return [];
-    return raw
-      .filter((c) => c && typeof c === 'object')
-      .map((c) => ({
-        id: typeof c.id === 'string' && c.id ? c.id : newId(),
-        title: typeof c.title === 'string' ? c.title : '',
-        text: typeof c.text === 'string' ? c.text : '',
-        imageUrl: typeof c.imageUrl === 'string' ? c.imageUrl : '',
-        audioUrl: typeof c.audioUrl === 'string' ? c.audioUrl : '',
-      }));
-  } catch {
-    return [];
-  }
-}
-
-function findCell(id) {
-  return cells.find((c) => c.id === id);
-}
-
-function saveCells(cells) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(cells, null, 2));
-}
-
-let cells = loadCells();
-let settings = loadSettings();
+const store = createStore();
 
 // --- Middleware ---
 app.use(express.json());
@@ -91,39 +29,14 @@ function requireAdmin(req, res, next) {
   return res.status(401).json({ error: 'Not authorized. Please log in as admin.' });
 }
 
-// --- File uploads ---
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname) || guessExt(file.mimetype);
-    const name = `${Date.now()}-${crypto.randomBytes(4).toString('hex')}${ext}`;
-    cb(null, name);
-  },
-});
-
-function guessExt(mime) {
-  if (!mime) return '';
-  if (mime.includes('mpeg') || mime.includes('mp3')) return '.mp3';
-  if (mime.includes('wav')) return '.wav';
-  if (mime.includes('ogg')) return '.ogg';
-  if (mime.includes('webm')) return '.webm';
-  if (mime.includes('png')) return '.png';
-  if (mime.includes('jpeg') || mime.includes('jpg')) return '.jpg';
-  if (mime.includes('gif')) return '.gif';
-  if (mime.includes('webp')) return '.webp';
-  return '';
-}
-
+// Uploads are held in memory so they can be stored in the database (or on disk).
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB
 });
 
-function deleteUpload(url) {
-  if (!url || !url.startsWith('/uploads/')) return;
-  const filePath = path.join(UPLOAD_DIR, path.basename(url));
-  fs.unlink(filePath, () => {});
-}
+// Wrap async handlers so rejected promises become 500s instead of crashing.
+const wrap = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
 
 // --- API routes ---
 app.post('/api/login', (req, res) => {
@@ -143,91 +56,103 @@ app.get('/api/session', (req, res) => {
   res.json({ isAdmin: !!(req.session && req.session.isAdmin) });
 });
 
-app.get('/api/cells', (req, res) => {
-  res.json(cells);
-});
+app.get('/api/cells', wrap(async (req, res) => {
+  res.json(await store.getCells());
+}));
 
 // Site settings (title + subtitle shown on the public page).
-app.get('/api/settings', (req, res) => {
-  res.json(settings);
-});
+app.get('/api/settings', wrap(async (req, res) => {
+  res.json(await store.getSettings());
+}));
 
-app.post('/api/settings', requireAdmin, (req, res) => {
+app.post('/api/settings', requireAdmin, wrap(async (req, res) => {
   const body = req.body || {};
-  if (typeof body.title === 'string') settings.title = body.title;
-  if (typeof body.subtitle === 'string') settings.subtitle = body.subtitle;
-  saveSettings(settings);
-  res.json(settings);
-});
+  res.json(await store.saveSettings({ title: body.title, subtitle: body.subtitle }));
+}));
 
 // Create a new empty tile (admin).
-app.post('/api/cells', requireAdmin, (req, res) => {
+app.post('/api/cells', requireAdmin, wrap(async (req, res) => {
+  const cells = await store.getCells();
   if (cells.length >= MAX_CELLS) {
     return res.status(400).json({ error: `Tile limit reached (${MAX_CELLS} max).` });
   }
-  const cell = { id: newId(), title: '', text: '', imageUrl: '', audioUrl: '' };
-  cells.push(cell);
-  saveCells(cells);
-  res.status(201).json(cell);
-});
+  res.status(201).json(await store.createCell());
+}));
 
 // Delete a tile (admin).
-app.delete('/api/cells/:id', requireAdmin, (req, res) => {
-  const idx = cells.findIndex((c) => c.id === req.params.id);
-  if (idx === -1) return res.status(404).json({ error: 'Tile not found.' });
-  deleteUpload(cells[idx].imageUrl);
-  deleteUpload(cells[idx].audioUrl);
-  cells.splice(idx, 1);
-  saveCells(cells);
+app.delete('/api/cells/:id', requireAdmin, wrap(async (req, res) => {
+  const cell = await store.getCell(req.params.id);
+  if (!cell) return res.status(404).json({ error: 'Tile not found.' });
+  await store.deleteMedia(cell.imageUrl);
+  await store.deleteMedia(cell.audioUrl);
+  await store.deleteCell(req.params.id);
   res.json({ ok: true });
-});
+}));
 
 // Update a cell: text/title/imageUrl as fields, plus optional image & audio files.
 app.post(
   '/api/cells/:id',
   requireAdmin,
   upload.fields([{ name: 'image', maxCount: 1 }, { name: 'audio', maxCount: 1 }]),
-  (req, res) => {
-    const cell = findCell(req.params.id);
-    if (!cell) {
-      return res.status(404).json({ error: 'Tile not found.' });
-    }
-    const body = req.body || {};
+  wrap(async (req, res) => {
+    const cell = await store.getCell(req.params.id);
+    if (!cell) return res.status(404).json({ error: 'Tile not found.' });
 
-    if (typeof body.title === 'string') cell.title = body.title;
-    if (typeof body.text === 'string') cell.text = body.text;
+    const body = req.body || {};
+    const fields = {};
+
+    if (typeof body.title === 'string') fields.title = body.title;
+    if (typeof body.text === 'string') fields.text = body.text;
 
     // Image: uploaded file takes priority, else explicit URL, else clear flag.
-    if (req.files && req.files.image && req.files.image[0]) {
-      deleteUpload(cell.imageUrl);
-      cell.imageUrl = '/uploads/' + req.files.image[0].filename;
+    const imageFile = req.files && req.files.image && req.files.image[0];
+    if (imageFile) {
+      await store.deleteMedia(cell.imageUrl);
+      fields.imageUrl = await store.saveMedia(imageFile.buffer, imageFile.mimetype);
     } else if (typeof body.imageUrl === 'string') {
-      if (body.imageUrl !== cell.imageUrl) deleteUpload(cell.imageUrl);
-      cell.imageUrl = body.imageUrl;
+      if (body.imageUrl !== cell.imageUrl) await store.deleteMedia(cell.imageUrl);
+      fields.imageUrl = body.imageUrl;
     }
     if (body.clearImage === 'true') {
-      deleteUpload(cell.imageUrl);
-      cell.imageUrl = '';
+      await store.deleteMedia(fields.imageUrl != null ? fields.imageUrl : cell.imageUrl);
+      fields.imageUrl = '';
     }
 
     // Audio: uploaded/recorded file replaces existing.
-    if (req.files && req.files.audio && req.files.audio[0]) {
-      deleteUpload(cell.audioUrl);
-      cell.audioUrl = '/uploads/' + req.files.audio[0].filename;
+    const audioFile = req.files && req.files.audio && req.files.audio[0];
+    if (audioFile) {
+      await store.deleteMedia(cell.audioUrl);
+      fields.audioUrl = await store.saveMedia(audioFile.buffer, audioFile.mimetype);
     }
     if (body.clearAudio === 'true') {
-      deleteUpload(cell.audioUrl);
-      cell.audioUrl = '';
+      await store.deleteMedia(fields.audioUrl != null ? fields.audioUrl : cell.audioUrl);
+      fields.audioUrl = '';
     }
 
-    saveCells(cells);
-    res.json(cell);
-  }
+    res.json(await store.updateCell(req.params.id, fields));
+  })
 );
+
+// Serve media stored in the database.
+app.get('/media/:id', wrap(async (req, res) => {
+  const media = await store.getMedia(req.params.id);
+  if (!media) return res.status(404).send('Not found');
+  res.set('Content-Type', media.mime);
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(media.data);
+}));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`Admin login at http://localhost:${PORT}/admin.html (password: ${ADMIN_PASSWORD})`);
+async function start() {
+  await store.init();
+  app.listen(PORT, () => {
+    console.log(`Server running at http://localhost:${PORT} (storage: ${store.type})`);
+    console.log(`Admin login at http://localhost:${PORT}/admin.html`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
