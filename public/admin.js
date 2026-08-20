@@ -254,11 +254,16 @@ function buildEditor(cell, index) {
         recBtn.disabled = true;
         recStatus.textContent = 'Processing…';
         recStatus.classList.remove('recording');
-        // Convert to WAV so it plays on all devices (iPhone/Safari can't play WebM).
+        // Compress to MP3 (small + plays on all devices incl. iPhone/Safari).
+        // Fall back to WAV, then to the raw recording, if encoding is unavailable.
         try {
-          recordedBlob = await toWav(rawBlob);
+          recordedBlob = await toMp3(rawBlob);
         } catch (err) {
-          recordedBlob = rawBlob; // fall back to the raw recording
+          try {
+            recordedBlob = await toWav(rawBlob);
+          } catch (err2) {
+            recordedBlob = rawBlob;
+          }
         }
         audioFileInput.value = '';
         clearAudio = false;
@@ -342,6 +347,56 @@ function extFromMime(mime) {
   if (mime.includes('mp4') || mime.includes('aac') || mime.includes('m4a')) return 'm4a';
   if (mime.includes('mpeg') || mime.includes('mp3')) return 'mp3';
   return 'webm';
+}
+
+// Decode a recorded blob to a mono AudioBuffer.
+async function decodeToBuffer(blob) {
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtx) throw new Error('No AudioContext');
+  const arrayBuffer = await blob.arrayBuffer();
+  const ctx = new AudioCtx();
+  try {
+    return await ctx.decodeAudioData(arrayBuffer);
+  } finally {
+    ctx.close();
+  }
+}
+
+// Compress a recorded blob to a small MP3 (mono). MP3 plays on all devices
+// including iPhone/Safari, and is far smaller than WAV.
+async function toMp3(blob) {
+  if (!window.lamejs || !window.lamejs.Mp3Encoder) throw new Error('No MP3 encoder');
+  const audioBuffer = await decodeToBuffer(blob);
+  const numCh = audioBuffer.numberOfChannels;
+  const len = audioBuffer.length;
+
+  // Downmix to mono.
+  const mono = new Float32Array(len);
+  for (let c = 0; c < numCh; c++) {
+    const data = audioBuffer.getChannelData(c);
+    for (let i = 0; i < len; i++) mono[i] += data[i] / numCh;
+  }
+
+  // Float -> 16-bit PCM.
+  const samples = new Int16Array(len);
+  for (let i = 0; i < len; i++) {
+    const s = Math.max(-1, Math.min(1, mono[i]));
+    samples[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+  }
+
+  const VALID_RATES = [8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000];
+  const sampleRate = VALID_RATES.includes(audioBuffer.sampleRate) ? audioBuffer.sampleRate : 44100;
+
+  const encoder = new lamejs.Mp3Encoder(1, sampleRate, 96); // mono, 96 kbps
+  const blockSize = 1152;
+  const chunks = [];
+  for (let i = 0; i < samples.length; i += blockSize) {
+    const buf = encoder.encodeBuffer(samples.subarray(i, i + blockSize));
+    if (buf.length) chunks.push(new Int8Array(buf));
+  }
+  const tail = encoder.flush();
+  if (tail.length) chunks.push(new Int8Array(tail));
+  return new Blob(chunks, { type: 'audio/mpeg' });
 }
 
 // Decode a recorded blob and re-encode it as a WAV file for maximum
